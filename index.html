@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#fafaf9">
+<title>Family Zukaj</title>
+<link rel="manifest" href="manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+::-webkit-scrollbar{width:0}
+body{font-family:'Nunito',sans-serif;background:#fafaf9;color:#1c1917;max-width:480px;margin:0 auto;min-height:100vh}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.a{animation:fadeUp .5s cubic-bezier(.22,1,.36,1) both}
+input,select,textarea{font-family:'Nunito',sans-serif}
+input:focus{outline:none;border-color:#fbbf24!important;box-shadow:0 0 0 3px rgba(251,191,36,.12)!important}
+</style>
+</head>
+<body>
+<div id="app"><div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px"><div style="width:32px;height:32px;border-radius:50%;border:3px solid #fde68a;border-top-color:#f59e0b;animation:spin 1s linear infinite"></div><p style="color:#a8a29e;font-size:14px">Laden...</p></div></div>
+
+<script type="module">
+// ─── FIREBASE (ES Module — loads guaranteed) ────────────────
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+import{getFirestore,doc,setDoc,onSnapshot}from"https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+const fbApp=initializeApp({
+  apiKey:"AIzaSyARWtObFL0cL8po4mBUSQJZ0jK06OpLNPE",
+  authDomain:"finance-family-97689.firebaseapp.com",
+  projectId:"finance-family-97689",
+  storageBucket:"finance-family-97689.firebasestorage.app",
+  messagingSenderId:"957514007704",
+  appId:"1:957514007704:web:9b3d00c0dd2b41aea1bced"
+});
+const db=getFirestore(fbApp);
+console.log("Firebase OK!");
+
+// ─── REACT (via esm.sh CDN) ────────────────────────────────
+import React from"https://esm.sh/react@18.2.0";
+import ReactDOM from"https://esm.sh/react-dom@18.2.0";
+import htm from"https://esm.sh/htm@3.1.1";
+const h=htm.bind(React.createElement);
+const{useState,useEffect,useCallback,useRef}=React;
+
+// ─── DB helpers ─────────────────────────────────────────────
+const dataRef=doc(db,"family","data");
+const profRef=doc(db,"family","profiles");
+async function dbSet(ref,d){try{await setDoc(ref,d);}catch(e){console.error(e);}}
+
+// ─── CONFIG ─────────────────────────────────────────────────
+const IC={groceries:{l:"Einkauf",s:"🛒",c:"#d97706"},dining:{l:"Restaurant",s:"🍽",c:"#dc2626"},transport:{l:"Transport",s:"🚘",c:"#2563eb"},health:{l:"Gesundheit",s:"⚕️",c:"#059669"},kids:{l:"Kinder",s:"🎒",c:"#7c3aed"},shopping:{l:"Shopping",s:"🏷",c:"#db2777"},entertainment:{l:"Freizeit",s:"🎭",c:"#0891b2"},unexpected:{l:"Unvorhergesehen",s:"⚠️",c:"#ea580c"},other:{l:"Sonstiges",s:"···",c:"#6b7280"},salary_r:{l:"Gehalt Rinor",s:"R",c:"#059669"},salary_re:{l:"Gehalt Renan",s:"R",c:"#047857"},bonus:{l:"Bonus",s:"★",c:"#d97706"},child_benefit:{l:"Kinderzulage",s:"KZ",c:"#7c3aed"},freelance:{l:"Freelance",s:"FL",c:"#2563eb"},other_in:{l:"Sonstiges",s:"+",c:"#6b7280"},rent:{l:"Miete",s:"🏠",c:"#78716c"},insurance:{l:"Versicherung",s:"🛡",c:"#78716c"},krankenkasse:{l:"Krankenkasse",s:"⚕️",c:"#78716c"},electricity:{l:"Strom/Gas",s:"⚡",c:"#78716c"},internet:{l:"Internet",s:"📡",c:"#78716c"},phone:{l:"Handy",s:"📱",c:"#78716c"},subscriptions:{l:"Abos",s:"↻",c:"#78716c"},gym:{l:"Fitness",s:"♦",c:"#78716c"},childcare:{l:"Betreuung",s:"🎒",c:"#78716c"},car:{l:"Auto/ÖV",s:"🚘",c:"#78716c"},savings:{l:"Sparen",s:"↗",c:"#78716c"},other_fix:{l:"Sonstiges",s:"···",c:"#78716c"}};
+const gc=id=>IC[id]||{l:id,s:"?",c:"#9ca3af"};
+const EXP=["groceries","dining","transport","health","kids","shopping","entertainment","unexpected","other"];
+const INC=["salary_r","salary_re","bonus","child_benefit","freelance","other_in"];
+const FIX=["rent","insurance","krankenkasse","electricity","internet","phone","subscriptions","gym","childcare","car","savings","other_fix"];
+const MO=["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+const fmt=n=>new Intl.NumberFormat("de-CH",{style:"currency",currency:"CHF"}).format(n);
+const mk=d=>{const x=new Date(d);return`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}`;};
+const now=new Date(),curMK=mk(now),dLeft=new Date(now.getFullYear(),now.getMonth()+1,0).getDate()-now.getDate(),today=new Date(now.toDateString());
+
+const DT=[{id:"date",l:"Date Night",i:"♥",c:"#e11d48"},{id:"walk",l:"Spazieren",i:"◯",c:"#059669"},{id:"sport",l:"Sport",i:"♦",c:"#2563eb"},{id:"movie",l:"Film/Serie",i:"▶",c:"#7c3aed"},{id:"dinner",l:"Essen gehen",i:"◈",c:"#d97706"},{id:"trip",l:"Ausflug",i:"→",c:"#0891b2"},{id:"other_d",l:"Sonstiges",i:"◇",c:"#6b7280"}];
+
+// ─── SMALL COMPONENTS ───────────────────────────────────────
+function CI({id,size=34}){const c=gc(id);return h`<div style=${{width:size,height:size,borderRadius:size*.28,display:"flex",alignItems:"center",justifyContent:"center",background:c.c+"12",color:c.c,fontSize:size*.4,fontWeight:800,flexShrink:0}}>${c.s}</div>`;}
+
+function Av({photo,name,size=36}){
+  if(photo)return h`<img src=${photo} alt="" style=${{width:size,height:size,borderRadius:size*.28,objectFit:"cover"}}/>`;
+  const bg=name==="Rinor"?"linear-gradient(135deg,#f59e0b,#f97316)":"linear-gradient(135deg,#ec4899,#f43f5e)";
+  return h`<div style=${{width:size,height:size,borderRadius:size*.28,background:bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:size*.4,fontWeight:800,fontFamily:"'Outfit'"}}>${name?.[0]||"?"}</div>`;
+}
+
+const Cd=({children,style,delay})=>h`<div class="a" style=${{background:"#fff",borderRadius:20,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,.02)",border:"1px solid #f5f5f4",marginBottom:14,animationDelay:(delay||0)+"s",...(style||{})}}>${children}</div>`;
+const Mt=({text})=>h`<div style=${{textAlign:"center",padding:"24px 12px"}}><p style=${{color:"#a8a29e",fontSize:13}}>${text}</p></div>`;
+const Sb=({children,onClick})=>h`<button onClick=${onClick} style=${{background:"#fffbeb",border:"1.5px solid #fde68a",borderRadius:12,padding:"8px 16px",fontSize:13,fontWeight:700,color:"#92400e",cursor:"pointer"}}>${children}</button>`;
+const Lb=({children})=>h`<label style=${{display:"block",fontSize:11,color:"#a8a29e",fontWeight:700,marginBottom:8,marginTop:18,textTransform:"uppercase",letterSpacing:".06em"}}>${children}</label>`;
+const Ip=({...p})=>h`<input ...${p} style=${{width:"100%",padding:"14px 16px",borderRadius:14,border:"1.5px solid #e7e5e4",background:"#fafaf9",color:"#1c1917",fontSize:16,fontWeight:600,...(p.style||{})}}/>`;
+const Bb=({children,onClick,disabled})=>h`<button onClick=${onClick} style=${{width:"100%",padding:"16px 0",borderRadius:16,border:"none",marginTop:22,background:"linear-gradient(135deg,#f59e0b,#f97316)",color:"#fff",fontSize:16,fontWeight:800,fontFamily:"'Outfit'",cursor:"pointer",boxShadow:"0 6px 20px rgba(245,158,11,.2)",opacity:disabled?.4:1}}>${children}</button>`;
+const Bk=({onClick})=>h`<button onClick=${onClick} style=${{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",fontSize:15,fontWeight:700,color:"#d97706",cursor:"pointer",padding:"12px 0",marginBottom:4}}>‹ Zurück</button>`;
+
+function Sh({onClose,children}){return h`<div style=${{position:"fixed",inset:0,background:"rgba(0,0,0,.25)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200}} onClick=${onClose}><div style=${{background:"#fff",borderRadius:"24px 24px 0 0",width:"100%",maxWidth:480,padding:"8px 22px 40px",maxHeight:"90vh",overflowY:"auto",animation:"slideUp .35s cubic-bezier(.22,1,.36,1) both"}} onClick=${e=>e.stopPropagation()}><div style=${{width:36,height:4,borderRadius:4,background:"#e7e5e4",margin:"8px auto 18px"}}/>${children}</div></div>`;}
+
+// ─── MAIN APP ───────────────────────────────────────────────
+function App(){
+  const[D,sD]=useState({transactions:[],fixcosts:[],tasks:[],shopping:[],dates:[],notifications:[]});
+  const[P,sP]=useState({Rinor:{photo:null},Renan:{photo:null}});
+  const[pg,sPg]=useState("home");
+  const[mo,sMo]=useState(curMK);
+  const[ml,sMl]=useState(null);
+  const[ld,sLd]=useState(true);
+  const[us,sUs]=useState(localStorage.getItem("fz-user")||"");
+  const[ts,sTs]=useState(null);
+
+  useEffect(()=>{
+    const u1=onSnapshot(dataRef,s=>{if(s.exists())sD(s.data());sLd(false);},()=>sLd(false));
+    const u2=onSnapshot(profRef,s=>{if(s.exists())sP(s.data());});
+    return()=>{u1();u2();};
+  },[]);
+
+  const sv=useCallback(d=>{sD(d);dbSet(dataRef,d);},[]);
+  const svP=useCallback(p=>{sP(p);dbSet(profRef,p);},[]);
+  const sUser=n=>{sUs(n);localStorage.setItem("fz-user",n);};
+  const ot=us==="Rinor"?"Renan":"Rinor";
+  const ntfy=m=>{sTs(m);setTimeout(()=>sTs(null),3e3);};
+  const addN=(d,t)=>{const n={id:Date.now().toString(),text:t,from:us,time:new Date().toISOString(),read:false};return{...d,notifications:[n,...(d.notifications||[])].slice(0,30)};};
+
+  const upPh=name=>{const i=document.createElement("input");i.type="file";i.accept="image/*";i.onchange=async e=>{const f=e.target.files?.[0];if(!f)return;const b=await new Promise((r,j)=>{const x=new FileReader();x.onload=()=>r(x.result);x.onerror=j;x.readAsDataURL(f);});const img=new Image();img.onload=()=>{const cv=document.createElement("canvas"),s=120;cv.width=s;cv.height=s;cv.getContext("2d").drawImage(img,(img.width-Math.min(img.width,img.height))/2,(img.height-Math.min(img.width,img.height))/2,Math.min(img.width,img.height),Math.min(img.width,img.height),0,0,s,s);svP({...P,[name]:{photo:cv.toDataURL("image/jpeg",.8)}});};img.src=b;};i.click();};
+
+  // Derived
+  const tx=D.transactions||[],mT=tx.filter(t=>mk(t.date)===mo);
+  const tI=mT.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
+  const tE=mT.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+  const tF=(D.fixcosts||[]).reduce((s,f)=>s+f.amount,0);
+  const bal=tI-tE-tF;
+  const oT=(D.tasks||[]).filter(t=>!t.done);
+  const myT=oT.filter(t=>t.assignee===us);
+  const od=oT.filter(t=>t.deadline&&new Date(t.deadline)<today);
+  const aL=(D.shopping||[]).find(l=>!l.archived)||null;
+  const uc=aL?.items?.filter(i=>!i.checked).length||0;
+  const up=(D.dates||[]).filter(d=>new Date(d.date)>=today).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const unr=(D.notifications||[]).filter(n=>!n.read&&n.from!==us);
+  const avM=[...new Set([curMK,...tx.map(t=>mk(t.date))])].sort().reverse();
+
+  const doneT=id=>{const t=(D.tasks||[]).find(x=>x.id===id);if(!t)return;let u={...D,tasks:D.tasks.map(x=>x.id===id?{...x,done:true,doneAt:new Date().toISOString(),doneBy:us}:x)};u=addN(u,`${us} hat "${t.title}" erledigt ✓`);sv(u);ntfy("Aufgabe erledigt!");};
+
+  if(ld)return h`<div style=${{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}><div style=${{width:32,height:32,borderRadius:"50%",border:"3px solid #fde68a",borderTopColor:"#f59e0b",animation:"spin 1s linear infinite"}}/></div>`;
+
+  // SETUP
+  if(!us)return h`<div style=${{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",padding:32}}>
+    <svg width="64" height="64" viewBox="0 0 48 48"><rect width="48" height="48" rx="14" fill="url(#g1)"/><defs><linearGradient id="g1" x1="0" y1="0" x2="48" y2="48"><stop stop-color="#f59e0b"/><stop offset="1" stop-color="#f97316"/></linearGradient></defs><text x="24" y="30" text-anchor="middle" fill="#fff" font-family="Georgia,serif" font-size="18" font-weight="bold">fz</text></svg>
+    <h1 style=${{fontFamily:"'Outfit'",fontSize:28,fontWeight:800,marginTop:16,letterSpacing:"-.03em"}}>Family Zukaj</h1>
+    <p style=${{fontSize:14,color:"#78716c",marginTop:4}}>Finanzen · Aufgaben · Einkauf · Wir-Zeit</p>
+    <div style=${{width:40,height:3,borderRadius:3,background:"linear-gradient(90deg,#f59e0b,#f97316)",margin:"28px 0"}}/>
+    <p style=${{fontSize:15,color:"#57534e",marginBottom:12,fontWeight:600}}>Wer bist du?</p>
+    ${["Rinor","Renan"].map(n=>h`<button key=${n} onClick=${()=>sUser(n)} style=${{width:"100%",maxWidth:280,padding:"18px 0",borderRadius:18,border:"1.5px solid #e7e5e4",background:"#fff",fontSize:17,fontWeight:700,cursor:"pointer",marginTop:10,fontFamily:"'Outfit'",display:"flex",alignItems:"center",justifyContent:"center",gap:14,boxShadow:"0 2px 8px rgba(0,0,0,.04)"}}><${Av} photo=${P[n]?.photo} name=${n} size=${42}/>${n}</button>`)}
+    <div style=${{width:40,height:3,borderRadius:3,background:"#f5f5f4",margin:"24px 0"}}/>
+    <p style=${{fontSize:13,color:"#a8a29e",marginBottom:12}}>Profilbilder hinzufügen</p>
+    <div style=${{display:"flex",gap:24}}>
+      ${["Rinor","Renan"].map(n=>h`<div key=${n} style=${{textAlign:"center",cursor:"pointer"}} onClick=${()=>upPh(n)}><${Av} photo=${P[n]?.photo} name=${n} size=${60}/><p style=${{fontSize:12,color:"#78716c",marginTop:8,fontWeight:600}}>${P[n]?.photo?"Ändern":"Foto +"}</p></div>`)}
+    </div>
+    <p style=${{fontSize:12,color:"#a8a29e",marginTop:32,textAlign:"center",lineHeight:1.7}}>Beide öffnen die App auf ihrem Handy.<br/>Alles synchronisiert in Echtzeit.</p>
+  </div>`;
+
+  // TILE STYLES
+  const ts0={display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,padding:"20px 18px",borderRadius:20,cursor:"pointer",textAlign:"left",minHeight:110};
+  const tn={fontFamily:"'Outfit'",fontSize:16,fontWeight:800,color:"#1c1917"};
+  const tsu={fontSize:12,fontWeight:600};
+  const ma={width:40,height:40,borderRadius:12,background:"#fff",border:"1.5px solid #e7e5e4",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,color:"#78716c",cursor:"pointer"};
+  const ab={flex:1,padding:"14px 0",borderRadius:14,border:"none",background:"linear-gradient(135deg,#f59e0b,#f97316)",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 14px rgba(245,158,11,.2)"};
+  const db2={background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:"8px 16px",fontSize:13,fontWeight:700,color:"#059669",cursor:"pointer",whiteSpace:"nowrap"};
+  const xb={background:"none",border:"none",color:"#d6d3d1",fontSize:14,cursor:"pointer",padding:6};
+
+  return h`<div>
+    ${ts&&h`<div style=${{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:"#059669",color:"#fff",padding:"12px 24px",borderRadius:14,fontSize:14,fontWeight:700,zIndex:300,boxShadow:"0 8px 24px rgba(0,0,0,.15)",animation:"fadeUp .3s ease both"}}>${ts}</div>`}
+
+    ${pg==="home"&&h`<div style=${{padding:"20px 16px 40px"}}>
+      <div style=${{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
+        <div style=${{display:"flex",alignItems:"center",gap:12}}>
+          <div style=${{cursor:"pointer"}} onClick=${()=>upPh(us)}><${Av} photo=${P[us]?.photo} name=${us} size=${44}/></div>
+          <div><h1 style=${{fontFamily:"'Outfit'",fontSize:20,fontWeight:800,letterSpacing:"-.02em"}}>Family Zukaj</h1><p style=${{fontSize:12,color:"#a8a29e",fontWeight:600}}>Hallo ${us}</p></div>
+        </div>
+        ${unr.length>0&&h`<div style=${{position:"relative",cursor:"pointer"}} onClick=${()=>sPg("notifs")}><span style=${{fontSize:22}}>🔔</span><span style=${{position:"absolute",top:-4,right:-6,width:18,height:18,borderRadius:9,background:"#dc2626",color:"#fff",fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>${unr.length}</span></div>`}
+      </div>
+      <${Cd}><div style=${{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}><div><p style=${{fontSize:11,fontWeight:700,color:"#a8a29e",textTransform:"uppercase",letterSpacing:".08em"}}>${MO[parseInt(mo.split("-")[1])-1]} · Noch ${dLeft} Tage</p><p style=${{fontFamily:"'Outfit'",fontSize:28,fontWeight:800,color:bal>=0?"#059669":"#dc2626",marginTop:4}}>${fmt(bal)}</p></div><span style=${{fontSize:12,fontWeight:700,color:"#a8a29e"}}>verfügbar</span></div><//>
+      <div style=${{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:8}}>
+        <button onClick=${()=>sPg("finance")} style=${{...ts0,background:"linear-gradient(135deg,#f0fdf4,#dcfce7)",border:"1px solid #bbf7d0"}}><div style=${{fontSize:22,fontWeight:800,fontFamily:"'Outfit'",color:"#166534"}}>CHF</div><p style=${tn}>Finanzen</p><p style=${{...tsu,color:"#166534"}}>${fmt(tE+tF)} ausgegeben</p></button>
+        <button onClick=${()=>sPg("tasks")} style=${{...ts0,background:od.length>0?"linear-gradient(135deg,#fef2f2,#fee2e2)":"linear-gradient(135deg,#fffbeb,#fef3c7)",border:od.length>0?"1px solid #fecaca":"1px solid #fde68a"}}><div style=${{fontSize:22,fontWeight:800,color:od.length>0?"#dc2626":"#92400e"}}>✓</div><p style=${tn}>Aufgaben</p><p style=${{...tsu,color:od.length>0?"#dc2626":"#92400e"}}>${od.length>0?od.length+" überfällig":myT.length>0?myT.length+" offen":"Alles erledigt"}</p></button>
+        <button onClick=${()=>sPg("shop")} style=${{...ts0,background:"linear-gradient(135deg,#eff6ff,#dbeafe)",border:"1px solid #bfdbfe"}}><div style=${{fontSize:22,color:"#1d4ed8"}}>🛒</div><p style=${tn}>Einkaufsliste</p><p style=${{...tsu,color:"#1e40af"}}>${uc>0?uc+" Artikel offen":"Liste leer"}</p></button>
+        <button onClick=${()=>sPg("wirzeit")} style=${{...ts0,background:"linear-gradient(135deg,#fdf2f8,#fce7f3)",border:"1px solid #fbcfe8"}}><div style=${{fontSize:22,color:"#be185d"}}>♥</div><p style=${tn}>Wir-Zeit</p><p style=${{...tsu,color:"#9d174d"}}>${up[0]?up[0].title:"Nichts geplant"}</p></button>
+      </div>
+      ${myT.length>0&&h`<${Cd} delay=${.1} style=${{marginTop:14}}><p style=${{fontFamily:"'Outfit'",fontSize:15,fontWeight:700,marginBottom:12}}>Deine Aufgaben</p>${myT.slice(0,3).map(t=>h`<div key=${t.id} style=${{display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:"1px solid #fafaf9"}}><div style=${{flex:1}}><p style=${{fontSize:14,fontWeight:700}}>${t.title}</p>${t.deadline&&h`<p style=${{fontSize:11,color:t.deadline&&new Date(t.deadline)<today?"#dc2626":"#78716c",fontWeight:600,marginTop:2}}>Frist: ${new Date(t.deadline).toLocaleDateString("de-CH")}</p>`}</div><button onClick=${()=>doneT(t.id)} style=${db2}>Erledigt</button></div>`)}<//>`}
+      ${up[0]&&h`<${Cd} delay=${.15}><p style=${{fontFamily:"'Outfit'",fontSize:15,fontWeight:700,marginBottom:10}}>Nächste Wir-Zeit</p><div style=${{background:"#fdf2f8",borderRadius:14,padding:"14px 18px",border:"1px solid #fbcfe8"}}><p style=${{fontSize:15,fontWeight:700}}>${up[0].title}</p><p style=${{fontSize:13,color:"#9d174d",marginTop:4}}>${new Date(up[0].date).toLocaleDateString("de-CH",{weekday:"long",day:"numeric",month:"long"})}${up[0].time?" · "+up[0].time:""}</p></div><//>`}
+    </div>`}
+
+    ${pg==="notifs"&&h`<div style=${{padding:"20px 16px 40px"}}><${Bk} onClick=${()=>{sv({...D,notifications:(D.notifications||[]).map(n=>({...n,read:true}))});sPg("home");}}/><h2 style=${{fontFamily:"'Outfit'",fontSize:22,fontWeight:800,marginBottom:16}}>Benachrichtigungen</h2>
+      ${(D.notifications||[]).slice(0,20).map(n=>h`<div key=${n.id} style=${{display:"flex",alignItems:"flex-start",gap:12,padding:"14px 0",borderBottom:"1px solid #f5f5f4"}}><${Av} photo=${P[n.from]?.photo} name=${n.from} size=${34}/><div style=${{flex:1}}><p style=${{fontSize:14,fontWeight:n.read?"500":"700"}}>${n.text}</p><p style=${{fontSize:11,color:"#a8a29e",marginTop:2}}>${new Date(n.time).toLocaleString("de-CH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</p></div></div>`)}
+      ${(!D.notifications||D.notifications.length===0)&&h`<${Mt} text="Keine Benachrichtigungen"/>`}
+    </div>`}
+
+    ${pg==="finance"&&h`<div style=${{padding:"20px 16px 40px"}}><${Bk} onClick=${()=>sPg("home")}/>
+      <div style=${{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <button onClick=${()=>{const i=avM.indexOf(mo);if(i<avM.length-1)sMo(avM[i+1]);}} style=${ma}>‹</button>
+        <div style=${{textAlign:"center"}}><p style=${{fontFamily:"'Outfit'",fontSize:18,fontWeight:700}}>${MO[parseInt(mo.split("-")[1])-1]} ${mo.split("-")[0]}</p>${mo===curMK&&h`<p style=${{fontSize:11,color:"#d97706",fontWeight:700,marginTop:2}}>Noch ${dLeft} Tage</p>`}</div>
+        <button onClick=${()=>{const i=avM.indexOf(mo);if(i>0)sMo(avM[i-1]);}} style=${ma}>›</button>
+      </div>
+      <${Cd}><p style=${{fontFamily:"'Outfit'",fontSize:32,fontWeight:800,color:bal>=0?"#059669":"#dc2626"}}>${fmt(bal)}</p><p style=${{fontSize:12,color:"#a8a29e",marginTop:4}}>Einnahmen ${fmt(tI)} · Ausgaben ${fmt(tE+tF)}</p><//>
+      <div style=${{display:"flex",gap:10,marginBottom:14}}>
+        <button onClick=${()=>sMl({t:"tx"})} style=${ab}>+ Buchung</button>
+        <button onClick=${()=>sMl({t:"fix"})} style=${{...ab,background:"#f5f5f4",color:"#57534e",boxShadow:"none"}}>+ Fixkosten</button>
+      </div>
+      <${Cd} delay=${.06}><p style=${{fontFamily:"'Outfit'",fontSize:15,fontWeight:700,marginBottom:12}}>Fixkosten — ${fmt(tF)}/Mt.</p>
+        ${(D.fixcosts||[]).map(f=>h`<div key=${f.id} style=${{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #fafaf9"}}><${CI} id=${f.category} size=${30}/><div style=${{flex:1}}><p style=${{fontSize:13,fontWeight:700}}>${f.name||gc(f.category).l}</p></div><span style=${{fontSize:14,fontWeight:800,fontFamily:"'Outfit'",color:"#78716c"}}>${fmt(f.amount)}</span><button onClick=${()=>sv({...D,fixcosts:D.fixcosts.filter(x=>x.id!==f.id)})} style=${xb}>✕</button></div>`)}
+        ${(!D.fixcosts||D.fixcosts.length===0)&&h`<${Mt} text="Noch keine Fixkosten"/>`}
+      <//>
+      <${Cd} delay=${.1}><p style=${{fontFamily:"'Outfit'",fontSize:15,fontWeight:700,marginBottom:12}}>Transaktionen</p>
+        ${mT.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(t=>h`<div key=${t.id} style=${{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #fafaf9"}}><${CI} id=${t.category} size=${32}/><div style=${{flex:1,minWidth:0}}><p style=${{fontSize:13,fontWeight:700}}>${gc(t.category).l}</p><p style=${{fontSize:11,color:"#a8a29e"}}>${t.note?t.note+" · ":""}${t.user} · ${new Date(t.date).toLocaleDateString("de-CH")}</p></div><span style=${{fontSize:14,fontWeight:800,fontFamily:"'Outfit'",color:t.type==="income"?"#059669":"#1c1917"}}>${t.type==="income"?"+":"−"}${fmt(t.amount)}</span><button onClick=${()=>sv({...D,transactions:D.transactions.filter(x=>x.id!==t.id)})} style=${xb}>✕</button></div>`)}
+        ${mT.length===0&&h`<${Mt} text="Keine Einträge"/>`}
+      <//>
+    </div>`}
+
+    ${pg==="tasks"&&h`<div style=${{padding:"20px 16px 40px"}}><${Bk} onClick=${()=>sPg("home")}/>
+      <div style=${{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><h2 style=${{fontFamily:"'Outfit'",fontSize:22,fontWeight:800}}>Aufgaben</h2><${Sb} onClick=${()=>sMl({t:"task"})}>+ Neue Aufgabe<//></div>
+      ${["Rinor","Renan"].map(nm=>{const ts2=oT.filter(t=>t.assignee===nm).sort((a,b)=>(a.deadline||"9")>(b.deadline||"9")?1:-1);if(!ts2.length)return null;return h`<${Cd} key=${nm}><div style=${{display:"flex",alignItems:"center",gap:10,marginBottom:14}}><${Av} photo=${P[nm]?.photo} name=${nm} size=${30}/><p style=${{fontFamily:"'Outfit'",fontSize:15,fontWeight:700}}>${nm}</p></div>${ts2.map(t=>h`<div key=${t.id} style=${{display:"flex",alignItems:"center",gap:12,padding:"14px 0",borderBottom:"1px solid #fafaf9"}}><div style=${{flex:1}}><p style=${{fontSize:15,fontWeight:700}}>${t.title}</p>${t.deadline&&h`<span style=${{fontSize:12,fontWeight:700,color:new Date(t.deadline)<today?"#dc2626":"#78716c",background:new Date(t.deadline)<today?"#fef2f2":"#f5f5f4",padding:"3px 10px",borderRadius:8,marginTop:4,display:"inline-block"}}>Frist: ${new Date(t.deadline).toLocaleDateString("de-CH")}</span>`}</div><button onClick=${()=>doneT(t.id)} style=${db2}>Erledigt</button></div>`)}<//>`;})}
+      ${oT.length===0&&h`<${Cd}><${Mt} text="Alles erledigt!"/><//>`}
+    </div>`}
+
+    ${pg==="shop"&&h`<div style=${{padding:"20px 16px 40px"}}><${Bk} onClick=${()=>sPg("home")}/>
+      <div style=${{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><h2 style=${{fontFamily:"'Outfit'",fontSize:22,fontWeight:800}}>Einkaufsliste</h2><${Sb} onClick=${()=>{const nl={id:Date.now().toString(),items:[],archived:false};sv({...D,shopping:[nl,...(D.shopping||[]).map(l=>({...l,archived:true}))]});}}>Neue Liste<//></div>
+      ${aL?h`<${Cd}><${SList} list=${aL} P=${P} onChange=${items=>sv({...D,shopping:D.shopping.map(l=>l.id===aL.id?{...l,items}:l)})}/><${AItem} onAdd=${text=>{let u={...D,shopping:D.shopping.map(l=>l.id===aL.id?{...l,items:[...l.items,{id:Date.now().toString(),text,checked:false,addedBy:us}]}:l)};u=addN(u,us+': "'+text+'" zur Liste');sv(u);}}/><//>`
+        :h`<${Cd}><${Mt} text="Keine aktive Liste"/><button onClick=${()=>{sv({...D,shopping:[{id:Date.now().toString(),items:[],archived:false},...(D.shopping||[])]});}} style=${{width:"100%",padding:"16px 0",borderRadius:16,border:"2px dashed #d6d3d1",background:"none",color:"#78716c",fontSize:15,fontWeight:700,cursor:"pointer"}}>Neue Liste erstellen</button><//>`}
+    </div>`}
+
+    ${pg==="wirzeit"&&h`<div style=${{padding:"20px 16px 40px"}}><${Bk} onClick=${()=>sPg("home")}/>
+      <div style=${{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><h2 style=${{fontFamily:"'Outfit'",fontSize:22,fontWeight:800}}>Wir-Zeit</h2><${Sb} onClick=${()=>sMl({t:"date"})}>+ Planen<//></div>
+      ${up.length>0?up.map(d=>{const dt=DT.find(x=>x.id===d.type)||DT[6];return h`<${Cd} key=${d.id}><div style=${{display:"flex",alignItems:"flex-start",gap:14}}><div style=${{width:48,height:48,borderRadius:14,background:dt.c+"12",display:"flex",alignItems:"center",justifyContent:"center",color:dt.c,fontSize:22,fontWeight:800,flexShrink:0}}>${dt.i}</div><div style=${{flex:1}}><p style=${{fontSize:16,fontWeight:700}}>${d.title}</p><p style=${{fontSize:13,color:"#78716c",marginTop:4}}>${new Date(d.date).toLocaleDateString("de-CH",{weekday:"long",day:"numeric",month:"long"})}${d.time?" · "+d.time:""}</p>${d.notes&&h`<p style=${{fontSize:13,color:"#a8a29e",marginTop:4}}>${d.notes}</p>`}</div><button onClick=${()=>sv({...D,dates:D.dates.filter(x=>x.id!==d.id)})} style=${xb}>✕</button></div><//>`;})
+        :h`<${Cd}><${Mt} text="Plant etwas Schönes zusammen!"/><//>`}
+    </div>`}
+
+    ${ml?.t==="tx"&&h`<${Sh} onClose=${()=>sMl(null)}><${TxF} onSave=${t=>{sv({...D,transactions:[t,...D.transactions]});sMl(null);ntfy("Gespeichert");}} user=${us}/><//>`}
+    ${ml?.t==="fix"&&h`<${Sh} onClose=${()=>sMl(null)}><${FixF} onSave=${f=>{sv({...D,fixcosts:[...(D.fixcosts||[]),f]});sMl(null);}}/><//>`}
+    ${ml?.t==="task"&&h`<${Sh} onClose=${()=>sMl(null)}><${TaskF} onSave=${t=>{let u=addN({...D,tasks:[...(D.tasks||[]),t]},us+': Aufgabe für '+t.assignee+' — "'+t.title+'"');sv(u);sMl(null);ntfy("Aufgabe erstellt");}} user=${us} other=${ot}/><//>`}
+    ${ml?.t==="date"&&h`<${Sh} onClose=${()=>sMl(null)}><${DateF} onSave=${d=>{let u=addN({...D,dates:[...(D.dates||[]),d]},us+' plant: "'+d.title+'"');sv(u);sMl(null);ntfy("Eingetragen!");}} user=${us}/><//>`}
+  </div>`;
+}
+
+// ─── SHOPPING ───────────────────────────────────────────────
+function SList({list,P,onChange}){
+  const tog=id=>onChange(list.items.map(i=>i.id===id?{...i,checked:!i.checked}:i));
+  const rem=id=>onChange(list.items.filter(i=>i.id!==id));
+  const xb={background:"none",border:"none",color:"#d6d3d1",fontSize:14,cursor:"pointer",padding:6};
+  return h`<div>
+    ${list.items.filter(i=>!i.checked).map(i=>h`<div key=${i.id} style=${{display:"flex",alignItems:"center",gap:12,padding:"14px 0",borderBottom:"1px solid #fafaf9"}}><button onClick=${()=>tog(i.id)} style=${{width:28,height:28,borderRadius:9,border:"2.5px solid #d97706",background:"none",cursor:"pointer",flexShrink:0}}/><p style=${{flex:1,fontSize:15,fontWeight:600}}>${i.text}</p><${Av} photo=${P[i.addedBy]?.photo} name=${i.addedBy} size=${20}/><button onClick=${()=>rem(i.id)} style=${xb}>✕</button></div>`)}
+    ${list.items.filter(i=>i.checked).length>0&&h`<p style=${{fontSize:12,color:"#a8a29e",fontWeight:700,marginTop:14}}>Erledigt</p>${list.items.filter(i=>i.checked).map(i=>h`<div key=${i.id} style=${{display:"flex",alignItems:"center",gap:12,padding:"8px 0",opacity:.5}}><button onClick=${()=>tog(i.id)} style=${{width:28,height:28,borderRadius:9,border:"2.5px solid #059669",background:"#f0fdf4",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#059669",fontSize:14,fontWeight:800}}>✓</button><p style=${{flex:1,fontSize:14,textDecoration:"line-through",color:"#a8a29e"}}>${i.text}</p></div>`)}`}
+  </div>`;
+}
+
+function AItem({onAdd}){const[v,sV]=useState("");return h`<div style=${{display:"flex",gap:8,marginTop:16}}><input value=${v} onChange=${e=>sV(e.target.value)} onKeyDown=${e=>{if(e.key==="Enter"&&v.trim()){onAdd(v.trim());sV("");}}} placeholder="Artikel hinzufügen…" style=${{flex:1,padding:"14px 16px",borderRadius:14,border:"1.5px solid #e7e5e4",background:"#fafaf9",fontSize:15,fontWeight:600}}/><button onClick=${()=>{if(v.trim()){onAdd(v.trim());sV("");}}} style=${{padding:"0 20px",borderRadius:14,border:"none",background:"#f59e0b",color:"#fff",fontWeight:800,fontSize:18,cursor:"pointer"}}>+</button></div>`;}
+
+// ─── FORMS ──────────────────────────────────────────────────
+function TxF({onSave,user}){
+  const[tp,sTp]=useState("expense");const[am,sAm]=useState("");const[ct,sCt]=useState("");const[nt,sNt]=useState("");const[dt,sDt]=useState(new Date().toISOString().slice(0,10));
+  const cs=tp==="expense"?EXP:INC;
+  return h`<h2 style=${{fontFamily:"'Outfit'",fontSize:19,fontWeight:800,marginBottom:16}}>Neue Buchung</h2>
+    <div style=${{display:"flex",gap:4,marginBottom:20,padding:4,borderRadius:14,background:"#fafaf9"}}>${[["expense","Ausgabe"],["income","Einnahme"]].map(([k,l])=>h`<button key=${k} onClick=${()=>{sTp(k);sCt("");}} style=${{flex:1,padding:"11px 0",borderRadius:11,border:"none",background:tp===k?(k==="expense"?"#fef2f2":"#f0fdf4"):"transparent",color:tp===k?(k==="expense"?"#dc2626":"#059669"):"#a8a29e",fontSize:14,fontWeight:700,cursor:"pointer"}}>${l}</button>`)}</div>
+    <${Lb}>Betrag (CHF)<//><${Ip} type="number" inputMode="decimal" value=${am} onChange=${e=>sAm(e.target.value)} placeholder="0.00" autoFocus/>
+    <${Lb}>Kategorie<//><div style=${{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>${cs.map(id=>h`<button key=${id} onClick=${()=>sCt(id)} style=${{display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:"12px 4px",borderRadius:14,border:"2px solid "+(ct===id?"#f59e0b":"#f5f5f4"),background:ct===id?"#fffbeb":"#fafaf9",cursor:"pointer"}}><${CI} id=${id} size=${30}/><span style=${{fontSize:10,fontWeight:600,color:ct===id?"#92400e":"#78716c"}}>${gc(id).l}</span></button>`)}</div>
+    <${Lb}>Datum<//><${Ip} type="date" value=${dt} onChange=${e=>sDt(e.target.value)}/>
+    <${Lb}>Notiz<//><${Ip} type="text" value=${nt} onChange=${e=>sNt(e.target.value)} placeholder="z.B. Wocheneinkauf"/>
+    <${Bb} onClick=${()=>{const a=parseFloat(am.replace(",","."));if(!a||!ct)return;onSave({id:Date.now().toString(),type:tp,amount:a,category:ct,note:nt,date:dt,user});}} disabled=${!am||!ct}>Hinzufügen<//>`;
+}
+
+function FixF({onSave}){
+  const[ct,sCt]=useState("");const[am,sAm]=useState("");const[nm,sNm]=useState("");
+  return h`<h2 style=${{fontFamily:"'Outfit'",fontSize:19,fontWeight:800,marginBottom:16}}>Neue Fixkosten</h2>
+    <${Lb}>Betrag / Monat<//><${Ip} type="number" inputMode="decimal" value=${am} onChange=${e=>sAm(e.target.value)} placeholder="0.00" autoFocus/>
+    <${Lb}>Kategorie<//><div style=${{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>${FIX.map(id=>h`<button key=${id} onClick=${()=>sCt(id)} style=${{display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:"10px 4px",borderRadius:14,border:"2px solid "+(ct===id?"#f59e0b":"#f5f5f4"),background:ct===id?"#fffbeb":"#fafaf9",cursor:"pointer"}}><${CI} id=${id} size=${28}/><span style=${{fontSize:10,fontWeight:600,color:ct===id?"#92400e":"#78716c"}}>${gc(id).l}</span></button>`)}</div>
+    <${Lb}>Bezeichnung<//><${Ip} type="text" value=${nm} onChange=${e=>sNm(e.target.value)} placeholder="z.B. Swisscom"/>
+    <${Bb} onClick=${()=>{const a=parseFloat(am.replace(",","."));if(!a||!ct)return;onSave({id:Date.now().toString(),category:ct,amount:a,name:nm});}} disabled=${!am||!ct}>Hinzufügen<//>`;
+}
+
+function TaskF({onSave,user,other}){
+  const[tl,sTl]=useState("");const[as,sAs]=useState(other);const[dl,sDl]=useState("");
+  return h`<h2 style=${{fontFamily:"'Outfit'",fontSize:19,fontWeight:800,marginBottom:16}}>Neue Aufgabe</h2>
+    <${Lb}>Was?<//><${Ip} type="text" value=${tl} onChange=${e=>sTl(e.target.value)} placeholder="z.B. Wäsche aufhängen" autoFocus/>
+    <${Lb}>Für wen?<//><div style=${{display:"flex",gap:10}}>${[user,other].map(n=>h`<button key=${n} onClick=${()=>sAs(n)} style=${{flex:1,padding:"14px 0",borderRadius:16,border:"2px solid "+(as===n?"#f59e0b":"#f5f5f4"),background:as===n?"#fffbeb":"#fafaf9",cursor:"pointer",fontSize:15,fontWeight:700,color:as===n?"#92400e":"#78716c"}}>${n}</button>`)}</div>
+    <${Lb}>Frist (optional)<//><${Ip} type="date" value=${dl} onChange=${e=>sDl(e.target.value)}/>
+    <${Bb} onClick=${()=>{if(!tl.trim())return;onSave({id:Date.now().toString(),title:tl.trim(),assignee:as,deadline:dl||null,done:false,createdBy:user,createdAt:new Date().toISOString()});}} disabled=${!tl.trim()}>Aufgabe erstellen<//>`;
+}
+
+function DateF({onSave,user}){
+  const[tl,sTl]=useState("");const[tp,sTp]=useState("date");const[dt,sDt]=useState("");const[tm,sTm]=useState("");const[nt,sNt]=useState("");
+  return h`<h2 style=${{fontFamily:"'Outfit'",fontSize:19,fontWeight:800,marginBottom:16}}>Wir-Zeit planen</h2>
+    <${Lb}>Was?<//><${Ip} type="text" value=${tl} onChange=${e=>sTl(e.target.value)} placeholder="z.B. Abendessen im Bianchi" autoFocus/>
+    <${Lb}>Art<//><div style=${{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>${DT.map(d=>h`<button key=${d.id} onClick=${()=>sTp(d.id)} style=${{display:"flex",flexDirection:"column",alignItems:"center",gap:5,padding:"12px 4px",borderRadius:14,border:"2px solid "+(tp===d.id?"#f59e0b":"#f5f5f4"),background:tp===d.id?"#fffbeb":"#fafaf9",cursor:"pointer"}}><span style=${{fontSize:20,color:d.c}}>${d.i}</span><span style=${{fontSize:9,fontWeight:600,color:tp===d.id?"#92400e":"#78716c"}}>${d.l}</span></button>`)}</div>
+    <${Lb}>Datum<//><${Ip} type="date" value=${dt} onChange=${e=>sDt(e.target.value)}/>
+    <${Lb}>Uhrzeit<//><${Ip} type="time" value=${tm} onChange=${e=>sTm(e.target.value)}/>
+    <${Lb}>Notizen<//><${Ip} type="text" value=${nt} onChange=${e=>sNt(e.target.value)} placeholder="z.B. Reservation 19:00"/>
+    <${Bb} onClick=${()=>{if(!tl.trim()||!dt)return;onSave({id:Date.now().toString(),title:tl.trim(),type:tp,date:dt,time:tm,notes:nt,createdBy:user});}} disabled=${!tl.trim()||!dt}>Eintragen<//>`;
+}
+
+ReactDOM.render(h`<${App}/>`,document.getElementById("app"));
+</script>
+</body>
+</html>
